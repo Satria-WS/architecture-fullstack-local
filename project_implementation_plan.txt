@@ -1,0 +1,147 @@
+================================================================================
+PROJECT IMPLEMENTATION PLAN: FULL-STACK NEXT.JS TO-DO APPLICATION
+================================================================================
+
+1. ARCHITECTURE & TECH STACK OVERVIEW
+--------------------------------------------------------------------------------
+Build a production-grade, full-stack To-Do application with authentication 
+using a Feature-Based Architecture and Thin Routing in Next.js (App Router).
+
+* Framework       : Next.js (App Router, Server Components, Server Actions)
+* Language        : TypeScript (Strict mode)
+* Styling & UI    : Tailwind CSS + Reusable UI primitives (src/components/ui)
+* Database & ORM  : PostgreSQL with Prisma ORM
+* Validation      : Zod (Client & Server-side schema validation)
+* Authentication  : Session/Cookie-based Auth (e.g., Better-Auth or Auth.js)
+
+
+2. DIRECTORY STRUCTURE
+--------------------------------------------------------------------------------
+Strictly follow this folder hierarchy. Do not place business logic or direct 
+database queries inside src/app/.
+
+├── prisma/                         # Database schema and seed scripts
+│   └── schema.prisma
+├── src/
+│   ├── app/                        # ROUTING LAYER (Keep thin: URLs & Layouts)
+│   │   ├── page.tsx                # Public landing page
+│   │   │   
+│   │   ├── (auth)/                 # Route group for unauthenticated users
+│   │   │   ├── layout.tsx
+│   │   │   ├── login/page.tsx
+│   │   │   └── register/page.tsx
+│   │   ├── (dashboard)/            # Route group for authenticated users
+│   │   │   ├── layout.tsx          # Protected shell (Navbar, Sidebar, Session)
+│   │   │   └── todos/
+│   │   │       ├── page.tsx        # Fetches initial data & renders feature UI
+│   │   │       ├── loading.tsx     # Suspense fallback skeleton
+│   │   │       └── error.tsx       # Error boundary
+│   │   ├── api/
+│   │   │   └── auth/[...all]/route.ts # Auth handler endpoint
+│   │   ├── globals.css
+│   │   └── layout.tsx
+│   │
+│   ├── features/                   # DOMAIN LAYER (Core business logic)
+│   │   ├── auth/
+│   │   │   ├── actions/            # login.ts, register.ts, logout.ts
+│   │   │   ├── components/         # login-form.tsx, register-form.tsx
+│   │   │   ├── schemas/            # auth-schema.ts (Zod)
+│   │   │   └── types/              # auth.types.ts
+│   │   └── todos/
+│   │       ├── actions/            # create-todo.ts, toggle-todo.ts, delete-todo.ts
+│   │       ├── queries/            # get-todos.ts
+│   │       ├── components/         # todo-list.tsx, todo-item.tsx, add-todo-form.tsx
+│   │       ├── schemas/            # todo-schema.ts (Zod)
+│   │       └── types/              # todo.types.ts
+│   │
+│   ├── components/                 # SHARED UI LAYER (Domain-agnostic UI)
+│   │   ├── ui/                     # Base primitives (button.tsx, input.tsx)
+│   │   └── shared/                 # Cross-feature UI (navbar.tsx, empty-state.tsx)
+│   │
+│   ├── lib/                        # INFRASTRUCTURE & UTILITIES
+│   │   ├── db.ts                   # Singleton ORM client instance
+│   │   ├── auth.ts                 # Auth configuration & session helpers
+│   │   └── utils.ts                # General helpers (e.g., class merging)
+│   │
+│   ├── types/                      # GLOBAL TYPES
+│   │   └── action-response.ts      # Standardized Server Action return type
+│   │
+│   └── middleware.ts               # Route protection & session redirection
+├── .env                            # Local secrets (gitignored)
+└── .env.example                    # Environment variable template
+
+
+3. STRICT CODING RULES & GUARDRAILS
+--------------------------------------------------------------------------------
+[Rule 1] File Naming Convention
+  Use kebab-case for all files and folders (e.g., add-todo-form.tsx, 
+  create-todo.ts) to ensure cross-platform Linux deployment compatibility.
+
+[Rule 2] Unidirectional Import Flow
+  - src/app/ can import from features/, components/, and lib/.
+  - src/features/ can import from components/ and lib/, NEVER from src/app/.
+  - Cross-feature imports are prohibited; move shared logic to 
+    src/components/shared/ or src/lib/.
+
+[Rule 3] Separation of Reads and Writes
+  - Put all database SELECT operations in features/<name>/queries/ and call 
+    them from Server Components.
+  - Put all INSERT, UPDATE, and DELETE operations in features/<name>/actions/ 
+    using "use server" and call revalidatePath() upon completion.
+
+[Rule 4] Standardized Server Action Responses
+  Every Server Action must return the following contract defined in 
+  src/types/action-response.ts:
+
+    export type ActionResponse<T = null> = {
+      success: boolean;
+      message: string;
+      data?: T;
+      errors?: Record<string, string[]>;
+    };
+
+[Rule 5] Security & Data Isolation
+  - Never trust client input. Validate all Server Action payloads on the 
+    server using Zod schemas from schemas/.
+  - Always verify the authenticated userId inside every query and mutation. 
+    All To-Do database queries must scope by userId 
+    (e.g., WHERE id = todoId AND userId = session.user.id) to prevent IDOR.
+
+
+4. STEP-BY-STEP EXECUTION PHASES
+--------------------------------------------------------------------------------
+[PHASE 1] Infrastructure & Database Setup
+  - Initialize TypeScript, Tailwind CSS, and ORM configuration (src/lib/db.ts).
+  - Define User and Todo models in prisma/schema.prisma (one-to-many relation).
+  - Create src/types/action-response.ts and .env.example.
+
+[PHASE 2] Authentication Feature (src/features/auth & middleware.ts)
+  - Configure authentication provider in src/lib/auth.ts and expose route 
+    handler in src/app/api/auth/[...all]/route.ts.
+  - Create Zod validation schemas in src/features/auth/schemas/auth-schema.ts.
+  - Implement Server Actions (login.ts, register.ts, logout.ts).
+  - Build UI components (login-form.tsx, register-form.tsx) and connect them 
+    to src/app/(auth)/login/page.tsx and register/page.tsx.
+  - Configure src/middleware.ts to protect /todos routes (redirect unauthenticated 
+    users to /login) and redirect logged-in users away from /login & /register.
+
+[PHASE 3] To-Do Feature (src/features/todos)
+  - Define Zod schemas in src/features/todos/schemas/todo-schema.ts 
+    (e.g., title min 1 char, max 255 chars).
+  - Implement read query in src/features/todos/queries/get-todos.ts filtered 
+    by userId and ordered by createdAt DESC.
+  - Implement Server Actions in src/features/todos/actions/:
+      * create-todo.ts
+      * toggle-todo.ts
+      * delete-todo.ts
+  - Build UI components in src/features/todos/components/:
+      * add-todo-form.tsx (Client Component handling submission & pending state)
+      * todo-list.tsx & todo-item.tsx (Interactive toggle & delete triggers)
+
+[PHASE 4] Dashboard Assembly & Edge Cases
+  - Assemble src/app/(dashboard)/layout.tsx with navigation and user session.
+  - Assemble src/app/(dashboard)/todos/page.tsx by calling getTodos() and 
+    passing data to <TodoList/>.
+  - Implement loading.tsx (skeleton UI) and error.tsx (graceful error recovery) 
+    inside src/app/(dashboard)/todos/.
+================================================================================
